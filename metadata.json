@@ -1,0 +1,6 @@
+{
+  "name": "ResumeCraft AI",
+  "description": "Professional AI-Powered Resume Builder with intelligent markdown parsing, live multi-template rendering, ATS score analysis, and PDF/DOCX exports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
