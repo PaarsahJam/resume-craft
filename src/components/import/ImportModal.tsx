@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useResumeStore } from '../../store/useResumeStore';
 import { parseResumeText } from '../../lib/parser';
 import { Upload, FileText, Check, X } from 'lucide-react';
@@ -14,20 +14,29 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose }) => 
   const [inputText, setInputText] = useState('');
   const [parsedPreview, setParsedPreview] = useState<any | null>(null);
 
+  // Parsing rebuilds the whole resume and mints fresh ids, so doing it on every
+  // keystroke made typing in a long paste crawl. Debounce it instead.
+  useEffect(() => {
+    if (inputText.trim().length <= 30) {
+      setParsedPreview(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setParsedPreview(parseResumeText(inputText));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [inputText]);
+
   if (!isOpen) return null;
 
   const handleTextChange = (text: string) => {
     setInputText(text);
-    if (text.trim().length > 30) {
-      const result = parseResumeText(text);
-      setParsedPreview(result);
-    } else {
-      setParsedPreview(null);
-    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Clear the value so re-picking the same file still fires a change event.
+    e.target.value = '';
     if (file) {
       const reader = new FileReader();
       reader.onload = (evt) => {
@@ -111,10 +120,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose }) => 
                 <Check className="w-4 h-4 text-emerald-600" /> Parsed Structure Preview:
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700">
-                <div><strong>Name:</strong> {parsedPreview.personal.fullName || 'Detected'}</div>
-                <div><strong>Headline:</strong> {parsedPreview.personal.headline || 'Detected'}</div>
-                <div><strong>Experience:</strong> {parsedPreview.experience.length} roles found</div>
-                <div><strong>Skills:</strong> {parsedPreview.skills.length} categories found</div>
+                <div><strong>Name:</strong> {parsedPreview.personal?.fullName || <span className="text-amber-600">not detected — fill in manually</span>}</div>
+                <div><strong>Headline:</strong> {parsedPreview.personal?.headline || <span className="text-amber-600">not detected — fill in manually</span>}</div>
+                <div><strong>Experience:</strong> {parsedPreview.experience?.length ?? 0} roles found</div>
+                <div><strong>Skills:</strong> {parsedPreview.skills?.length ?? 0} categories found</div>
               </div>
             </div>
           )}

@@ -14,8 +14,8 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({ summary = '', head
   const [aiSuggestions, setAiSuggestions] = useState<{ concise?: string; executive?: string } | null>(null);
   const [showConsentModal, setShowConsentModal] = useState(false);
 
-  const requestAiSummary = async () => {
-    if (!aiConsentGiven) {
+  const requestAiSummary = async (force = false) => {
+    if (!aiConsentGiven && !force) {
       setShowConsentModal(true);
       return;
     }
@@ -128,7 +128,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({ summary = '', head
                 onClick={() => {
                   setAiConsentGiven(true);
                   setShowConsentModal(false);
-                  requestAiSummary();
+                  requestAiSummary(true);
                 }}
                 className="px-5 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
               >

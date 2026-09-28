@@ -10,7 +10,22 @@ export const VersionDiffModal: React.FC = () => {
   const r1 = resumes.find((r) => r.id === diffResumeIds[0]);
   const r2 = resumes.find((r) => r.id === diffResumeIds[1]);
 
-  if (!r1 || !r2) return null;
+  if (!r1 || !r2) {
+    // One of the compared resumes was deleted; leave the dead-end view instead
+    // of rendering a permanently blank workspace.
+    return (
+      <div className="p-12 text-center text-slate-500 font-medium space-y-4">
+        <p>One of the selected resumes no longer exists.</p>
+        <button
+          type="button"
+          onClick={() => setDiffResumeIds(null)}
+          className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6 animate-in fade-in">
@@ -45,7 +60,7 @@ export const VersionDiffModal: React.FC = () => {
 
           <div>
             <h3 className="font-bold text-slate-500 uppercase text-[10px] tracking-wider mb-1">Headline</h3>
-            <p className="text-slate-800 font-medium">{r1.personal.headline}</p>
+            <p className="text-slate-800 font-medium">{r1.personal?.headline}</p>
           </div>
 
           <div>
@@ -57,7 +72,7 @@ export const VersionDiffModal: React.FC = () => {
 
           <div>
             <h3 className="font-bold text-slate-500 uppercase text-[10px] tracking-wider mb-1">Experience Count</h3>
-            <p className="text-slate-800 font-bold">{r1.experience.length} roles</p>
+            <p className="text-slate-800 font-bold">{(r1.experience || []).length} roles</p>
           </div>
         </div>
 
@@ -70,7 +85,7 @@ export const VersionDiffModal: React.FC = () => {
 
           <div>
             <h3 className="font-bold text-slate-500 uppercase text-[10px] tracking-wider mb-1">Headline</h3>
-            <p className="text-slate-800 font-medium">{r2.personal.headline}</p>
+            <p className="text-slate-800 font-medium">{r2.personal?.headline}</p>
           </div>
 
           <div>
@@ -82,7 +97,7 @@ export const VersionDiffModal: React.FC = () => {
 
           <div>
             <h3 className="font-bold text-slate-500 uppercase text-[10px] tracking-wider mb-1">Experience Count</h3>
-            <p className="text-slate-800 font-bold">{r2.experience.length} roles</p>
+            <p className="text-slate-800 font-bold">{(r2.experience || []).length} roles</p>
           </div>
         </div>
       </div>

@@ -137,8 +137,14 @@ export default function App() {
 
       {/* Main View Workspace */}
       <main className="flex-1 overflow-hidden relative">
-        {diffResumeIds ? (
-          <VersionDiffModal />
+        {activeView === 'diff' ? (
+          diffResumeIds ? (
+            <VersionDiffModal />
+          ) : (
+            <div className="p-12 text-center text-slate-500 font-medium">
+              Select two resumes from the dashboard to compare them.
+            </div>
+          )
         ) : activeView === 'builder' ? (
           <ResumeBuilderView />
         ) : activeView === 'dashboard' ? (

@@ -18,6 +18,7 @@ const SECTION_LABELS: Record<string, string> = {
   education: 'Education',
   certifications: 'Certifications',
   languages: 'Languages',
+  additional: 'Custom Sections',
 };
 
 export const SectionReorderModal: React.FC<SectionReorderModalProps> = ({

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ProjectItem } from '../../types';
 import { FolderGit2, Plus, Trash2, ExternalLink } from 'lucide-react';
 
@@ -6,6 +6,38 @@ interface ProjectsEditorProps {
   projects: ProjectItem[];
   onChange: (updated: ProjectItem[]) => void;
 }
+
+// Keeps the raw text locally while typing. Committing the parsed array on
+// every keystroke stripped the trailing separator, so typing "React," could
+// never produce a second technology.
+const TechnologiesInput: React.FC<{
+  value: string[];
+  onChange: (technologies: string[]) => void;
+}> = ({ value, onChange }) => {
+  const [text, setText] = useState(value.join(', '));
+
+  useEffect(() => {
+    setText(value.join(', '));
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() =>
+        onChange(
+          text
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
+        )
+      }
+      placeholder="React, C#, OpenGL"
+      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-900 outline-none"
+    />
+  );
+};
 
 export const ProjectsEditor: React.FC<ProjectsEditorProps> = ({ projects, onChange }) => {
   const handleAddProject = () => {
@@ -80,16 +112,9 @@ export const ProjectsEditor: React.FC<ProjectsEditorProps> = ({ projects, onChan
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">Technologies Used (comma separated)</label>
-                <input
-                  type="text"
-                  value={proj.technologies?.join(', ') || ''}
-                  onChange={(e) =>
-                    handleUpdate(proj.id, {
-                      technologies: e.target.value.split(',').map((t) => t.trim()).filter(Boolean),
-                    })
-                  }
-                  placeholder="React, C#, OpenGL"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-900 outline-none"
+                <TechnologiesInput
+                  value={proj.technologies || []}
+                  onChange={(technologies) => handleUpdate(proj.id, { technologies })}
                 />
               </div>
 

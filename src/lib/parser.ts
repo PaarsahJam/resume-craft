@@ -8,6 +8,7 @@ import {
   LanguageItem,
   AdditionalSectionItem,
 } from '../types';
+import { isArmenianText } from './i18n';
 
 // ============================================================================
 // 1. MAJOR SECTION LEVEL-1 WHITELIST
@@ -365,6 +366,7 @@ export function parseResumeText(rawText: string, title?: string): Resume {
   let github = '';
   let linkedin = '';
   let summary = '';
+  let firstContentSeen = false;
 
   const skills: SkillCategory[] = [];
   const experience: ExperienceItem[] = [];
@@ -389,15 +391,14 @@ export function parseResumeText(rawText: string, title?: string): Resume {
     if (currentExp && (currentExp.jobTitle || currentExp.company)) {
       experience.push({
         id: 'exp-' + Math.random().toString(36).substr(2, 9),
-        jobTitle: currentExp.jobTitle || 'Software Engineer',
-        company: currentExp.company || 'Company / Project',
+        jobTitle: currentExp.jobTitle || '',
+        company: currentExp.company || '',
         location: currentExp.location || '',
         startDate: currentExp.startDate || '',
         endDate: currentExp.endDate || '',
-        description:
-          currentExp.description && currentExp.description.length > 0
-            ? currentExp.description
-            : ['Engineering responsibilities and deliverables.'],
+        // Empty rather than a fabricated bullet: the user should not export
+        // achievement text they never wrote.
+        description: currentExp.description && currentExp.description.length > 0 ? currentExp.description : [],
         flagged: currentExp.flagged || false,
       });
     }
@@ -575,7 +576,9 @@ export function parseResumeText(rawText: string, title?: string): Resume {
     if (line.startsWith('[DATES]')) {
       const dStr = line.replace(/^\[DATES\]\s*/i, '').trim();
       if (currentExp) {
-        const dParts = dStr.split(/–|—|-/);
+        // Split on spaced range separators only; a bare `-` would break
+        // hyphenated values like "2023-01 – 2024-05".
+        const dParts = dStr.split(/\s*[–—]\s*|\s+-\s+/);
         currentExp.startDate = dParts[0]?.trim() || dStr;
         currentExp.endDate = dParts[1]?.trim() || '';
       } else if (currentEdu) {
@@ -663,24 +666,26 @@ export function parseResumeText(rawText: string, title?: string): Resume {
     }
 
     if (line.startsWith('[TRAINING]')) {
+      currentSection = 'TRAINING';
       continue;
     }
 
     if (line.startsWith('[TRAINING ITEM]')) {
       const tItem = line.replace(/^\[TRAINING ITEM\]\s*/i, '').trim();
       currentTrainingBuffer.push(`• ${tItem}`);
+      const sep = tItem.search(/\s+[-–—]\s+|\s*[|·]\s*/);
       certifications.push({
         id: 'cert-' + Math.random().toString(36).substr(2, 9),
-        name: tItem.split(/—|-/)[0]?.trim() || tItem,
-        issuer: tItem.split(/—|-/)[1]?.trim() || 'ACECR Sharif University Training Center',
-        date: tItem.match(/\d{4}/)?.[0] || 'Certified',
+        name: sep >= 0 ? tItem.slice(0, sep).trim() : tItem,
+        issuer: sep >= 0 ? tItem.slice(sep).replace(/^[\s\-–—|·]+/, '').trim() : '',
+        date: tItem.match(/\d{4}/)?.[0] || '',
       });
       continue;
     }
 
     if (line.startsWith('[LANGUAGE]')) {
       const lName = line.replace(/^\[LANGUAGE\]\s*/i, '').trim();
-      languages.push({ language: lName, level: 'Proficient' });
+      languages.push({ language: lName, level: undefined });
       continue;
     }
 
@@ -729,10 +734,15 @@ export function parseResumeText(rawText: string, title?: string): Resume {
     // C. Section-Specific Line Handling
     // ------------------------------------------------------------------------
     if (currentSection === 'HEADER') {
-      if (i === 0 && !fullName && !line.includes('@')) {
+      // Track the first *content* line rather than `i === 0`: a pasted resume
+      // that starts with a blank line used to put the name in the headline slot
+      // and fall through to a placeholder name.
+      if (!fullName && !firstContentSeen && !line.includes('@')) {
+        firstContentSeen = true;
         fullName = line.replace(/^#+\s*/, '').replace(/\*+/g, '').trim();
         continue;
       }
+      firstContentSeen = true;
 
       const eMatch = line.match(emailRegex);
       if (eMatch && !email) email = eMatch[1];
@@ -755,9 +765,16 @@ export function parseResumeText(rawText: string, title?: string): Resume {
         (line.includes('Armenia') ||
           line.includes('Yerevan') ||
           line.includes('Remote') ||
-          line.includes('Iran'))
+          line.includes('Iran') ||
+          // Armenian locations ("Հայաստան", "Երևան", "Հեռավար")
+          isArmenianText(line))
       ) {
-        location = line.replace(/^[|•\-\s]+|[|•\-\s]+$/g, '').trim();
+        // Only the first segment: storing the whole line duplicated every
+        // contact value in the exported DOCX contact row.
+        location = line
+          .split('|')[0]
+          .replace(/^[••\-\s]+|[••\-\s]+$/g, '')
+          .trim();
       }
       continue;
     }
@@ -829,70 +846,105 @@ export function parseResumeText(rawText: string, title?: string): Resume {
     }
 
     if (currentSection === 'EXPERIENCE') {
-      const isBullet =
-        line.startsWith('-') ||
-        line.startsWith('*') ||
-        line.startsWith('•') ||
-        line.startsWith('[BULLET]');
+      // A bullet marker must be followed by whitespace, and markdown-bold
+      // headers such as `**Acme Corp** | 2023 - 2025` are headers, not bullets.
+      const isBullet = /^(?:[-*•])\s/.test(line) && !/^\*\*/.test(line);
 
       const subHeaderMatch = line.match(/^#{3,4}\s+(.*)/);
-      const isHeaderLine =
-        Boolean(subHeaderMatch) ||
-        (!isBullet &&
-          (line.includes('|') ||
-            line.match(/\d{4}\s*[-–—]\s*(\d{4}|Present|Current|Ներկա)/i)));
+      const hasDateRange = /\d{4}\s*[-–—]\s*(\d{4}|Present|Current|Ներկա)/i.test(line);
+      const isHeaderLine = Boolean(subHeaderMatch) || (!isBullet && (line.includes('|') || hasDateRange));
 
-      if (isHeaderLine) {
+      if (!isHeaderLine) {
+        if (currentExp) {
+          const bulletText = line.replace(/^(?:[-*•])\s*/, '').replace(/\*/g, '').trim();
+          if (bulletText) {
+            currentExp.description = currentExp.description || [];
+            currentExp.description.push(bulletText);
+          }
+        }
+        continue;
+      }
+
+      const textLine = (subHeaderMatch ? subHeaderMatch[1] : line).replace(/\*/g, '').trim();
+
+      // A `### Role` heading only names the role; the `Company | Location |
+      // Dates` line that follows completes the *same* entry. Starting a new
+      // entry here used to double every role in the parsed output.
+      if (subHeaderMatch) {
+        const pending = currentExp;
+        const pendingHasDetail =
+          pending &&
+          (pending.company ||
+            pending.startDate ||
+            (pending.description && pending.description.length > 0));
+        if (pendingHasDetail) finalizeExp();
+        currentExp = { description: [], jobTitle: textLine };
+        continue;
+      }
+
+      // A detail line that follows a role heading enriches it; otherwise it
+      // opens a new role.
+      const pending = currentExp;
+      const enrichesPending =
+        pending && !pending.company && !pending.startDate && !(pending.description && pending.description.length);
+
+      if (!enrichesPending) {
         finalizeExp();
         currentExp = { description: [] };
+      }
+      const exp = currentExp as Partial<ExperienceItem>;
 
-        const textLine = subHeaderMatch ? subHeaderMatch[1] : line;
-        const parts = textLine.split(/\||–|—/);
+      // Pull the date range out first so it is not mistaken for a field, and
+      // split it across start/end instead of storing "2023 - 2025" as a start.
+      const dateMatch = textLine.match(/(\d{4}\s*[-–—]\s*(?:\d{4}|Present|Current|Ներկա))|(?:\d{4}\s*[-–—]\s*\S+)/i);
+      if (dateMatch) {
+        const range = dateMatch[1].split(/\s*[-–—]\s*/);
+        exp.startDate = range[0].trim();
+        exp.endDate = range.slice(1).join(' - ').trim();
+      }
 
-        if (subHeaderMatch) {
-          currentExp.jobTitle = textLine.replace(/\*/g, '').trim();
-        } else if (parts.length >= 2) {
-          currentExp.company = parts[0].replace(/\*/g, '').trim();
-          const rest = parts.slice(1).join(' ').trim();
-          const dateMatch =
-            rest.match(/(\d{4}\s*[-–—]\s*(?:\d{4}|Present|Current|Ներկա))/i) ||
-            rest.match(/(\d{4})/);
-          if (dateMatch) {
-            currentExp.startDate = dateMatch[1];
-          }
-          currentExp.location = rest
-            .replace(dateMatch ? dateMatch[0] : '', '')
-            .replace(/[\(\)]/g, '')
-            .trim();
-        } else {
-          currentExp.jobTitle = textLine.replace(/\*/g, '').trim();
+      const segs = textLine
+        .replace(dateMatch ? dateMatch[0] : '', '')
+        .split(/\s*\|\s*/)
+        .map((s) => s.replace(/\s{2,}/g, ' ').replace(/^[\s\-–—,]+|[\s\-–,]+$/g, '').trim())
+        .filter(Boolean);
+
+      if (enrichesPending) {
+        // The role heading already supplied the job title, so what is left is
+        // company and/or location.
+        if (segs.length >= 2) {
+          exp.company = segs[0];
+          exp.location = segs.slice(1).join(', ');
+        } else if (segs.length === 1) {
+          exp.location = segs[0];
         }
-      } else if (currentExp) {
-        const bulletText = line.replace(/^[-*•]\s*/, '').trim();
-        if (bulletText) {
-          currentExp.description = currentExp.description || [];
-          currentExp.description.push(bulletText);
-        }
+      } else if (segs.length >= 2) {
+        // Single-line format: "Job Title | Company | Location | Dates".
+        exp.jobTitle = segs[0];
+        exp.company = segs[1];
+        if (segs.length >= 3) exp.location = segs.slice(2).join(', ');
+      } else if (segs.length === 1) {
+        exp.jobTitle = segs[0];
       }
       continue;
     }
 
     if (currentSection === 'PROJECTS') {
-      const isBullet =
-        line.startsWith('-') ||
-        line.startsWith('*') ||
-        line.startsWith('•') ||
-        line.startsWith('[BULLET]');
-
-      if (line.startsWith('###') || (!isBullet && !currentProj)) {
+      if (line.startsWith('###') || !currentProj) {
+        // A bulleted first entry (`- **My App** — accounting tool`) previously
+        // hit no branch at all and was silently dropped.
         finalizeProj();
         currentProj = {
-          name: line.replace(/^###\s*/, '').replace(/\*/g, '').trim(),
+          name: line
+            .replace(/^###\s*/, '')
+            .replace(/^(?:[-*•])\s*/, '')
+            .replace(/\*/g, '')
+            .trim(),
           description: '',
           technologies: [],
         };
-      } else if (currentProj) {
-        const bulletText = line.replace(/^[-*•]\s*/, '').trim();
+      } else {
+        const bulletText = line.replace(/^(?:[-*•])\s*/, '').replace(/\*/g, '').trim();
         if (
           bulletText.toLowerCase().startsWith('technologies:') ||
           bulletText.toLowerCase().startsWith('tech:')
@@ -906,7 +958,7 @@ export function parseResumeText(rawText: string, title?: string): Resume {
           currentProj.url = bulletText;
         } else if (!currentProj.description) {
           currentProj.description = bulletText;
-        } else {
+        } else if (bulletText) {
           currentProj.description += '\n• ' + bulletText;
         }
       }
@@ -914,43 +966,68 @@ export function parseResumeText(rawText: string, title?: string): Resume {
     }
 
     if (currentSection === 'EDUCATION') {
-      const isBullet = line.startsWith('-') || line.startsWith('*') || line.startsWith('•');
+      const isBullet = /^(?:[-*•])\s/.test(line);
       if (line.startsWith('###') || (!isBullet && !currentEdu)) {
         finalizeEdu();
-        const parts = line.replace(/^###\s*/, '').split(/[-–—,|]/);
+        // Split on structural separators only, not on hyphens: degree names and
+        // institution names legitimately contain them.
+        const parts = line
+          .replace(/^###\s*/, '')
+          .split(/\s*[|–—,]\s*/)
+          .map((p) => p.replace(/\*/g, '').trim())
+          .filter(Boolean);
         currentEdu = {
-          institution: parts[0]?.replace(/\*/g, '').trim() || 'Azad University',
-          degree: parts[1]?.replace(/\*/g, '').trim() || 'Electronic Engineering Studies',
-          dates: parts[2]?.trim() || 'Coursework Completed',
+          institution: parts[0] ?? '',
+          degree: parts[1] ?? '',
+          dates: parts[2] ?? '',
         };
       } else if (currentEdu) {
-        currentEdu.description =
-          (currentEdu.description ? currentEdu.description + ' ' : '') +
-          line.replace(/^[-*•]\s*/, '').trim();
+        // Continuation lines usually carry the real degree and dates.
+        const cont = line.replace(/^[-*•]\s*/, '').trim();
+        const contParts = cont.split(/\s*\|\s*/).map((p) => p.replace(/\*/g, '').trim()).filter(Boolean);
+        const dateSeg = contParts.find((p) => /\d{4}/.test(p));
+        const degreeSeg = contParts.find((p) => p !== dateSeg);
+
+        if (degreeSeg && !currentEdu.degree) currentEdu.degree = degreeSeg;
+        if (dateSeg) currentEdu.dates = dateSeg;
+        else if (cont) {
+          currentEdu.description =
+            (currentEdu.description ? currentEdu.description + ' ' : '') + cont;
+        }
       }
       continue;
     }
 
     if (currentSection === 'TRAINING' || currentSection === 'CERTIFICATIONS') {
       const clean = line.replace(/^[-*•]\s*/, '').trim();
+      if (!clean) continue;
       currentTrainingBuffer.push(`• ${clean}`);
-      const parts = clean.split(/[-–—,|]/);
+      // Split on the first separator only, otherwise an issuer containing a
+      // dash gets truncated mid-word.
+      const sep = clean.search(/\s+[-–—]\s+|\s*[|·]\s*/);
+      const name = sep >= 0 ? clean.slice(0, sep).replace(/\*/g, '').trim() : clean.replace(/\*/g, '').trim();
+      const issuer = sep >= 0 ? clean.slice(sep).replace(/^[\s\-–—|·]+/, '').replace(/\*/g, '').trim() : '';
       certifications.push({
         id: 'cert-' + Math.random().toString(36).substr(2, 9),
-        name: parts[0]?.replace(/\*/g, '').trim() || clean,
-        issuer: parts[1]?.trim() || 'Sharif University Training Center (ACECR)',
-        date: clean.match(/\d{4}/)?.[0] || 'Certified',
+        name: name || clean,
+        issuer,
+        date: clean.match(/\d{4}/)?.[0] || '',
       });
       continue;
     }
 
     if (currentSection === 'LANGUAGES') {
       const clean = line.replace(/^[-*•]\s*/, '').trim();
-      if (clean.includes(':')) {
-        const [lang, level] = clean.split(':');
-        languages.push({ language: lang.trim(), level: level.trim() });
+      if (!clean) continue;
+      const colon = clean.indexOf(':');
+      if (colon >= 0) {
+        // Slice on the first colon only; a second colon used to truncate the line.
+        languages.push({
+          language: clean.slice(0, colon).trim(),
+          level: clean.slice(colon + 1).trim() || undefined,
+        });
       } else {
-        languages.push({ language: clean, level: 'Proficient' });
+        languages.push({ language: clean, level: undefined });
       }
       continue;
     }
@@ -1025,35 +1102,23 @@ export function parseResumeText(rawText: string, title?: string): Resume {
       tags: ['Imported', 'ATS-Optimized'],
     },
     personal: {
-      fullName: fullName || 'PAARSAH SOROURI JAM',
-      headline:
-        headline ||
-        'Software Engineer | Full-Stack Developer | .NET / Java | React / Next.js | Flutter | Sensor Processing & 3D Visualization',
-      location: location || 'Yerevan, Armenia',
-      email: email || 'paarsah.sorouri@gmail.com',
-      phone: phone || '+374 93 067 011',
+      // Never fall back to sample personal details here: whatever the parser
+      // cannot find must stay empty so the user fills in their own contact
+      // info rather than exporting someone else's.
+      fullName: fullName || '',
+      headline: headline || '',
+      location: location || '',
+      email: email || '',
+      phone: phone || '',
       website: website || '',
-      github: github || 'https://github.com/PaarsahJam',
-      linkedin: linkedin || 'linkedin.com/in/paarsah-sorouri-jam-2892922a2',
+      github: github || '',
+      linkedin: linkedin || '',
     },
     summary: summary || '',
     skills:
       sanitizedSkills.length > 0
         ? sanitizedSkills
-        : [
-            {
-              category: 'Programming Languages',
-              items: [
-                'C#',
-                'Java',
-                'JavaScript / ES6+',
-                'TypeScript',
-                'Python',
-                'Dart',
-                'C/C++ — previous project experience',
-              ],
-            },
-          ],
+        : [],
     experience,
     projects,
     education,

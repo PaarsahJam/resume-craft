@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PhotoShape } from '../../types';
 import { Camera, Check, X, Circle, Square, LayoutGrid, Image as ImageIcon } from 'lucide-react';
 
@@ -20,6 +20,17 @@ export const PhotoCropModal: React.FC<PhotoCropModalProps> = ({
   const [dataUrl, setDataUrl] = useState<string>(currentDataUrl || '');
   const [shape, setShape] = useState<PhotoShape>(currentShape);
   const [zoom, setZoom] = useState<number>(1);
+
+  // This component stays mounted while closed, so `useState` captured the props
+  // once at mount — usually before the user had uploaded a photo. Sync on open
+  // so the cropper shows the current image and "Apply" cannot wipe it.
+  useEffect(() => {
+    if (isOpen) {
+      setDataUrl(currentDataUrl || '');
+      setShape(currentShape);
+      setZoom(1);
+    }
+  }, [isOpen, currentDataUrl, currentShape]);
 
   if (!isOpen) return null;
 
@@ -141,11 +152,13 @@ export const PhotoCropModal: React.FC<PhotoCropModalProps> = ({
           </button>
           <button
             type="button"
+            disabled={!dataUrl}
             onClick={() => {
+              if (!dataUrl) return;
               onSave(dataUrl, shape);
               onClose();
             }}
-            className="px-5 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm shadow-blue-500/20"
+            className="px-5 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check className="w-3.5 h-3.5" />
             Apply Photo

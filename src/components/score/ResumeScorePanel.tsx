@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useResumeStore } from '../../store/useResumeStore';
+import { Resume } from '../../types';
 import { Target, Sparkles, CheckCircle2, AlertCircle, ShieldAlert, Loader2 } from 'lucide-react';
 
 export const ResumeScorePanel: React.FC = () => {
@@ -26,7 +27,7 @@ export const ResumeScorePanel: React.FC = () => {
     const items: { label: string; score: number; max: number; status: 'good' | 'warn' }[] = [];
 
     // 1. Contact completeness
-    const p = activeResume.personal;
+    const p = activeResume.personal || ({} as Resume['personal']);
     const hasContact = Boolean(p.email && p.phone && p.location);
     items.push({
       label: 'Contact Info Completeness',
@@ -46,7 +47,7 @@ export const ResumeScorePanel: React.FC = () => {
     });
 
     // 3. Technical Skills
-    const skillCount = activeResume.skills.flatMap((s) => s.items).length;
+    const skillCount = (activeResume.skills || []).flatMap((s) => s?.items || []).length;
     items.push({
       label: 'Skills Density',
       score: skillCount >= 10 ? 20 : skillCount >= 5 ? 12 : 5,
@@ -55,8 +56,11 @@ export const ResumeScorePanel: React.FC = () => {
     });
 
     // 4. Quantified Metrics in Experience
-    const allBullets = activeResume.experience.flatMap((e) => e.description);
-    const metricBullets = allBullets.filter((b) => /\d+|%|\$|k|M|x/i.test(b)).length;
+    const allBullets = (activeResume.experience || []).flatMap((e) => e?.description || []);
+    // Must require a real number: a bare /k|M|x/ also matches "Key", "Complex", etc.
+    const metricBullets = allBullets.filter((b) =>
+      /(?:\d+\s*%)|(?:\$\s*\d)|(?:\b\d[\d,.]*\s*[kKmMbB]\b)|(?:\b\d[\d,.]*\+?\b)|(?:\bx\d+\b)/.test(b)
+    ).length;
     const metricRatio = allBullets.length > 0 ? metricBullets / allBullets.length : 0;
     items.push({
       label: 'Quantified Impact Metrics (% / $ / #)',
@@ -112,8 +116,8 @@ export const ResumeScorePanel: React.FC = () => {
   }, [activeResume, jobDescriptionInput]);
 
   // Handle AI JD tailoring request
-  const requestAiJdTailoring = async () => {
-    if (!aiConsentGiven) {
+  const requestAiJdTailoring = async (force = false) => {
+    if (!aiConsentGiven && !force) {
       setShowConsentModal(true);
       return;
     }
@@ -136,7 +140,15 @@ export const ResumeScorePanel: React.FC = () => {
 
       if (!res.ok) throw new Error('AI analysis failed');
       const data = await res.json();
-      setJdMatch(data);
+      // The model response is untyped and the server falls back to `{}`, so
+      // normalise before storing or the render below will throw on `.length`.
+      setJdMatch({
+        score: Number(data.score) || 0,
+        matchedKeywords: Array.isArray(data.matchedKeywords) ? data.matchedKeywords : [],
+        missingKeywords: Array.isArray(data.missingKeywords) ? data.missingKeywords : [],
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+        lastAnalyzedAt: new Date().toISOString(),
+      });
     } catch (e: any) {
       alert(e.message || 'AI request failed');
     } finally {
@@ -296,7 +308,7 @@ export const ResumeScorePanel: React.FC = () => {
                 onClick={() => {
                   setAiConsentGiven(true);
                   setShowConsentModal(false);
-                  requestAiJdTailoring();
+                  requestAiJdTailoring(true);
                 }}
                 className="px-5 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
               >

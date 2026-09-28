@@ -17,9 +17,9 @@ export const LanguagesEditor: React.FC<LanguagesEditorProps> = ({ languages, onC
   };
 
   const handleUpdate = (index: number, field: 'language' | 'level', value: string) => {
-    const updated = [...languages];
-    updated[index][field] = value;
-    onChange(updated);
+    // Copy the item: mutating it in place would also rewrite the history
+    // snapshot it shares with the store, so Undo would have nothing to restore.
+    onChange(languages.map((l, idx) => (idx === index ? { ...l, [field]: value } : l)));
   };
 
   return (

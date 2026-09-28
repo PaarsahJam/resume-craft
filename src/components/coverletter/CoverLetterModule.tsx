@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useResumeStore } from '../../store/useResumeStore';
 import { FileCode, Sparkles, Copy, Check, Loader2, Download, ShieldAlert } from 'lucide-react';
 
@@ -9,20 +9,68 @@ export const CoverLetterModule: React.FC = () => {
     jobDescriptionInput,
     coverLetter,
     setCoverLetter,
+    coverLetters,
+    saveCoverLetter,
+    updateCoverLetter,
     aiConsentGiven,
     setAiConsentGiven,
   } = useResumeStore();
 
-  const [companyName, setCompanyName] = useState('Target Company');
-  const [jobTitle, setJobTitle] = useState('Senior Software Engineer');
+  const [companyName, setCompanyName] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
 
   const activeResume = resumes.find((r) => r.id === activeResumeId);
 
-  const requestCoverLetter = async () => {
-    if (!aiConsentGiven) {
+  // Flush pending cover-letter edits when the component unmounts or the letter changes.
+  const pendingLetterId = useRef<string | null>(null);
+  const pendingBody = useRef('');
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persistBody = useCallback(
+    (body: string) => {
+      pendingBody.current = body;
+      if (flushTimer.current) clearTimeout(flushTimer.current);
+      flushTimer.current = setTimeout(() => {
+        flushTimer.current = null;
+        if (pendingLetterId.current) {
+          updateCoverLetter(pendingLetterId.current, pendingBody.current);
+        } else if (pendingBody.current) {
+          pendingLetterId.current = saveCoverLetter({ body: pendingBody.current });
+        }
+      }, 500);
+    },
+    [saveCoverLetter, updateCoverLetter]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (flushTimer.current) clearTimeout(flushTimer.current);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      if (pendingLetterId.current) {
+        updateCoverLetter(pendingLetterId.current, pendingBody.current);
+      }
+    };
+  }, [updateCoverLetter]);
+
+  // Each resume owns its own letter; never carry one resume's draft into another's.
+  useEffect(() => {
+    const existing = coverLetters.find((cl) => cl.resumeId === activeResumeId);
+    pendingLetterId.current = existing?.id ?? null;
+    pendingBody.current = existing?.body ?? '';
+    setCoverLetter(existing?.body ?? '');
+  }, [activeResumeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleBodyChange = (body: string) => {
+    setCoverLetter(body);
+    persistBody(body);
+  };
+
+  const requestCoverLetter = async (force = false) => {
+    if (!aiConsentGiven && !force) {
       setShowConsentModal(true);
       return;
     }
@@ -31,7 +79,7 @@ export const CoverLetterModule: React.FC = () => {
 
     setIsGenerating(true);
     try {
-      const res = await fetch('/api/ai/cover-letter', {
+      const res = await fetch('/api/ai/generate-cover-letter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -44,7 +92,7 @@ export const CoverLetterModule: React.FC = () => {
 
       if (!res.ok) throw new Error('Cover letter generation failed');
       const data = await res.json();
-      setCoverLetter(data.coverLetter);
+      handleBodyChange(data.body || '');
     } catch (e: any) {
       alert(e.message || 'AI request failed');
     } finally {
@@ -56,18 +104,23 @@ export const CoverLetterModule: React.FC = () => {
     if (!coverLetter) return;
     navigator.clipboard.writeText(coverLetter);
     setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setIsCopied(false), 2000);
   };
 
   const handleDownloadTxt = () => {
     if (!coverLetter) return;
+    const slug = (companyName || 'cover-letter').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '');
     const blob = new Blob([coverLetter], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Cover-Letter-${companyName.replace(/\s+/g, '-')}.txt`;
+    a.download = `Cover-Letter-${slug || 'draft'}.txt`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    // Revoking in the same task can abort the download in Firefox/Safari.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   if (!activeResume) return null;
@@ -149,7 +202,7 @@ export const CoverLetterModule: React.FC = () => {
         <textarea
           rows={12}
           value={coverLetter}
-          onChange={(e) => setCoverLetter(e.target.value)}
+          onChange={(e) => handleBodyChange(e.target.value)}
           placeholder="Click 'Generate Cover Letter' above to create a tailored draft..."
           className="w-full p-4 border border-slate-200 rounded-2xl text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-y font-sans"
         />
@@ -180,7 +233,7 @@ export const CoverLetterModule: React.FC = () => {
                 onClick={() => {
                   setAiConsentGiven(true);
                   setShowConsentModal(false);
-                  requestCoverLetter();
+                  requestCoverLetter(true);
                 }}
                 className="px-5 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
               >

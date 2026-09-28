@@ -198,24 +198,26 @@ export const ExecutiveTemplate: React.FC<TemplateProps> = ({ resume, options }) 
               </section>
             );
 
+          case 'additional':
+            if (!additionalSections || additionalSections.length === 0) return null;
+            return (
+              <div key="additional" className="space-y-4">
+                {additionalSections.map((sec) => (
+                  <section key={sec.id} className="mb-5 break-inside-avoid">
+                    <h2 className="text-xs font-sans font-bold uppercase tracking-widest border-b border-stone-300 pb-1 mb-2 text-stone-800" style={{ color: options.atsMode ? '#000' : darkAccent }}>
+                      {sec.title}
+                    </h2>
+                    <p className="text-xs text-stone-800 whitespace-pre-wrap">{sec.content}</p>
+                  </section>
+                ))}
+              </div>
+            );
+
           default:
             return null;
         }
       })}
 
-      {/* Additional Sections */}
-      {additionalSections && additionalSections.length > 0 && (
-        <div className="space-y-4">
-          {additionalSections.map((sec) => (
-            <section key={sec.id} className="mb-5 break-inside-avoid">
-              <h2 className="text-xs font-sans font-bold uppercase tracking-widest border-b border-stone-300 pb-1 mb-2 text-stone-800" style={{ color: options.atsMode ? '#000' : darkAccent }}>
-                {sec.title}
-              </h2>
-              <p className="text-xs text-stone-800 whitespace-pre-wrap">{sec.content}</p>
-            </section>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

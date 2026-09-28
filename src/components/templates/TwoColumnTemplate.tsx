@@ -192,7 +192,7 @@ export const TwoColumnTemplate: React.FC<TemplateProps> = ({ resume, options }) 
         )}
 
         {/* Additional Sections */}
-        {additionalSections && additionalSections.length > 0 && (
+        {!isHidden('additional') && additionalSections && additionalSections.length > 0 && (
           <div className="space-y-4">
             {additionalSections.map((sec) => (
               <section key={sec.id} className="mb-6 break-inside-avoid">

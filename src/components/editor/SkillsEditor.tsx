@@ -22,15 +22,25 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({ skills, onChange }) 
 
   const handleAddItem = (catIndex: number, itemText: string) => {
     if (!itemText.trim()) return;
-    const updated = [...skills];
-    updated[catIndex].items.push(itemText.trim());
-    onChange(updated);
+    // Copy the touched category too: mutating the shared nested array would
+    // also rewrite every history snapshot, breaking Undo.
+    onChange(
+      skills.map((cat, idx) =>
+        idx === catIndex ? { ...cat, items: [...cat.items, itemText.trim()] } : cat
+      )
+    );
   };
 
   const handleRemoveItem = (catIndex: number, itemIndex: number) => {
-    const updated = [...skills];
-    updated[catIndex].items.splice(itemIndex, 1);
-    onChange(updated);
+    onChange(
+      skills.map((cat, idx) =>
+        idx === catIndex ? { ...cat, items: cat.items.filter((_, i) => i !== itemIndex) } : cat
+      )
+    );
+  };
+
+  const handleRenameCategory = (catIndex: number, name: string) => {
+    onChange(skills.map((cat, idx) => (idx === catIndex ? { ...cat, category: name } : cat)));
   };
 
   return (
@@ -51,11 +61,7 @@ export const SkillsEditor: React.FC<SkillsEditorProps> = ({ skills, onChange }) 
                 <input
                   type="text"
                   value={cat.category}
-                  onChange={(e) => {
-                    const updated = [...skills];
-                    updated[catIdx].category = e.target.value;
-                    onChange(updated);
-                  }}
+                  onChange={(e) => handleRenameCategory(catIdx, e.target.value)}
                   className="font-bold text-xs text-slate-900 bg-transparent border-b border-slate-300 focus:border-blue-600 outline-none px-1 py-0.5"
                 />
                 <button

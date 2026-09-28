@@ -193,24 +193,26 @@ export const MinimalTemplate: React.FC<TemplateProps> = ({ resume, options }) =>
               </section>
             );
 
+          case 'additional':
+            if (!additionalSections || additionalSections.length === 0) return null;
+            return (
+              <div key="additional" className="space-y-4">
+                {additionalSections.map((sec) => (
+                  <section key={sec.id} className="mb-6 break-inside-avoid">
+                    <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-2">
+                      {sec.title}
+                    </h2>
+                    <p className="text-xs text-zinc-700 whitespace-pre-wrap">{sec.content}</p>
+                  </section>
+                ))}
+              </div>
+            );
+
           default:
             return null;
         }
       })}
 
-      {/* Additional Sections */}
-      {additionalSections && additionalSections.length > 0 && (
-        <div className="space-y-4">
-          {additionalSections.map((sec) => (
-            <section key={sec.id} className="mb-6 break-inside-avoid">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-2">
-                {sec.title}
-              </h2>
-              <p className="text-xs text-zinc-700 whitespace-pre-wrap">{sec.content}</p>
-            </section>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

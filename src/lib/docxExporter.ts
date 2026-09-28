@@ -208,18 +208,15 @@ export async function generateDocxBlob(resume: Resume, options: TemplateOptions)
           children: [new TextRun({ text: langStr, size: 20 })],
         })
       );
-    }
-  }
-
-  // Additional sections
-  if (additionalSections && additionalSections.length > 0) {
-    for (const add of additionalSections) {
-      children.push(createSectionHeader(add.title));
-      children.push(
-        new Paragraph({
-          children: [new TextRun({ text: add.content, size: 20 })],
-        })
-      );
+    } else if (sec === 'additional' && additionalSections && additionalSections.length > 0) {
+      for (const add of additionalSections) {
+        children.push(createSectionHeader(add.title));
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: add.content, size: 20 })],
+          })
+        );
+      }
     }
   }
 

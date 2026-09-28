@@ -414,18 +414,19 @@ export const PlumDuotoneTemplate: React.FC<PlumDuotoneTemplateProps> = ({ resume
         )}
 
         {/* Additional Sections (e.g. Technical Strengths, References) */}
-        {additionalSections
-          ?.filter((s) => !s.title.toLowerCase().includes('availability'))
-          .map((sec) => (
-            <section key={sec.id}>
-              <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1 mb-3.5">
-                {sec.title}
-              </h2>
-              <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
-                {sec.content}
-              </div>
-            </section>
-          ))}
+        {!isHidden('additional') &&
+          additionalSections
+            ?.filter((s) => !s.title.toLowerCase().includes('availability'))
+            .map((sec) => (
+              <section key={sec.id}>
+                <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1 mb-3.5">
+                  {sec.title}
+                </h2>
+                <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                  {sec.content}
+                </div>
+              </section>
+            ))}
       </main>
     </div>
   );

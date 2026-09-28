@@ -258,24 +258,26 @@ export const ModernTechTemplate: React.FC<TemplateProps> = ({ resume, options })
               </section>
             );
 
+          case 'additional':
+            if (!additionalSections || additionalSections.length === 0) return null;
+            return (
+              <div key="additional" className="space-y-4">
+                {additionalSections.map((sec) => (
+                  <section key={sec.id} className="mb-5 break-inside-avoid">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 border-b border-slate-200 pb-1" style={{ color: options.atsMode ? '#000' : primaryColor }}>
+                      {sec.title}
+                    </h2>
+                    <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">{sec.content}</p>
+                  </section>
+                ))}
+              </div>
+            );
+
           default:
             return null;
         }
       })}
 
-      {/* Additional Custom Sections */}
-      {additionalSections && additionalSections.length > 0 && (
-        <div className="space-y-4">
-          {additionalSections.map((sec) => (
-            <section key={sec.id} className="mb-5 break-inside-avoid">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 border-b border-slate-200 pb-1" style={{ color: options.atsMode ? '#000' : primaryColor }}>
-                {sec.title}
-              </h2>
-              <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">{sec.content}</p>
-            </section>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

@@ -14,10 +14,14 @@ export const ExportControls: React.FC = () => {
     templateOptions,
     setTemplateOptions,
     updateActiveResume,
+    aiConsentGiven,
+    setAiConsentGiven,
   } = useResumeStore();
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [pendingTranslate, setPendingTranslate] = useState<'English' | 'Armenian' | null>(null);
 
   const activeResume = resumes.find((r) => r.id === activeResumeId);
 
@@ -81,11 +85,20 @@ export const ExportControls: React.FC = () => {
     const a = document.createElement('a');
     a.href = url;
     a.download = formatFileName(activeResume.personal.fullName, 'json');
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    // Revoking in the same task can abort the download in Firefox/Safari.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
-  const handleTranslateResume = async (targetLang: 'English' | 'Armenian') => {
+  const handleTranslateResume = async (targetLang: 'English' | 'Armenian', force = false) => {
+    if (!aiConsentGiven && !force) {
+      setPendingTranslate(targetLang);
+      setShowConsentModal(true);
+      return;
+    }
+
     setIsTranslating(true);
     try {
       const res = await fetch('/api/ai/translate-resume', {
@@ -102,10 +115,30 @@ export const ExportControls: React.FC = () => {
       }
 
       const translatedResume = await res.json();
-      if (translatedResume && translatedResume.personal) {
-        updateActiveResume(translatedResume);
-        setTemplateOptions({ language: targetLang === 'Armenian' ? 'hy' : 'en' });
+      // Model output is unvalidated JSON: a null/missing array here would be
+      // merged straight into the resume and crash every template that maps it.
+      const requiredArrays = [
+        'skills',
+        'experience',
+        'projects',
+        'education',
+        'certifications',
+        'languages',
+        'additionalSections',
+        'sectionOrder',
+        'hiddenSections',
+      ] as const;
+
+      if (
+        !translatedResume ||
+        !translatedResume.personal ||
+        requiredArrays.some((key) => !Array.isArray(translatedResume[key]))
+      ) {
+        throw new Error('The AI returned an incomplete resume. Please try again.');
       }
+
+      updateActiveResume(translatedResume);
+      setTemplateOptions({ language: targetLang === 'Armenian' ? 'hy' : 'en' });
     } catch (e: any) {
       alert('AI Translation failed: ' + e.message);
     } finally {
@@ -382,6 +415,47 @@ export const ExportControls: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Privacy Consent Gate Modal */}
+      {showConsentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center gap-2 text-amber-600 font-bold text-base mb-2">
+              <ShieldCheck className="w-5 h-5" />
+              Privacy Consent Gate
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Translating sends your <strong>entire resume</strong> to the AI service so the text can be translated. Nothing is stored on external servers.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConsentModal(false);
+                  setPendingTranslate(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAiConsentGiven(true);
+                  setShowConsentModal(false);
+                  const lang = pendingTranslate;
+                  setPendingTranslate(null);
+                  if (lang) handleTranslateResume(lang, true);
+                }}
+                className="px-5 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
+              >
+                Allow &amp; Translate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

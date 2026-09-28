@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ExperienceItem } from '../../types';
-import { Briefcase, Plus, Trash2, Copy, AlertTriangle, Sparkles, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Briefcase, Plus, Trash2, Copy, AlertTriangle, Sparkles, Loader2, ChevronDown, ChevronUp, ShieldAlert } from 'lucide-react';
 import { useResumeStore } from '../../store/useResumeStore';
 
 interface ExperienceEditorProps {
@@ -11,11 +11,25 @@ interface ExperienceEditorProps {
 export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onChange }) => {
   const { aiConsentGiven, setAiConsentGiven } = useResumeStore();
   const [expandedId, setExpandedId] = useState<string | null>(experience[0]?.id || null);
+  // This editor is reused across resume switches and the first role can be
+  // deleted, so the remembered id can point at a role that no longer exists.
+  useEffect(() => {
+    if (expandedId && experience.some((e) => e.id === expandedId)) return;
+    setExpandedId(experience[0]?.id ?? null);
+  }, [experience, expandedId]);
   const [improvingBulletInfo, setImprovingBulletInfo] = useState<{
     expId: string;
     bulletIndex: number;
   } | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [pendingAiBullet, setPendingAiBullet] = useState<{
+    expId: string;
+    bulletIndex: number;
+    currentBullet: string;
+    jobTitle: string;
+    company: string;
+  } | null>(null);
   const [aiBulletChoices, setAiBulletChoices] = useState<{
     impact?: string;
     concise?: string;
@@ -83,6 +97,17 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
 
   const triggerAiBulletImprovement = async (expId: string, bulletIndex: number, currentBullet: string, jobTitle: string, company: string) => {
     setImprovingBulletInfo({ expId, bulletIndex });
+
+    if (!aiConsentGiven) {
+      setPendingAiBullet({ expId, bulletIndex, currentBullet, jobTitle, company });
+      setShowConsentModal(true);
+      return;
+    }
+
+    await runAiBulletImprovement(expId, bulletIndex, currentBullet, jobTitle, company);
+  };
+
+  const runAiBulletImprovement = async (expId: string, bulletIndex: number, currentBullet: string, jobTitle: string, company: string) => {
     setIsAiLoading(true);
     setAiBulletChoices(null);
 
@@ -99,7 +124,11 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
 
       if (!res.ok) throw new Error('AI bullet enhancement failed');
       const data = await res.json();
-      setAiBulletChoices(data);
+      setAiBulletChoices({
+        impact: data.impact,
+        concise: data.concise,
+        technical: data.technical,
+      });
     } catch (e: any) {
       alert(e.message || 'AI request failed');
     } finally {
@@ -293,6 +322,17 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
                                     <strong className="text-indigo-600">High Impact: </strong> {aiBulletChoices.impact}
                                   </div>
                                 )}
+                                {aiBulletChoices.concise && (
+                                  <div
+                                    onClick={() => {
+                                      handleBulletChange(exp.id, bIdx, aiBulletChoices.concise!);
+                                      setImprovingBulletInfo(null);
+                                    }}
+                                    className="p-2 bg-white rounded border border-indigo-200 hover:border-indigo-500 cursor-pointer text-xs text-slate-800 font-medium"
+                                  >
+                                    <strong className="text-indigo-600">Concise: </strong> {aiBulletChoices.concise}
+                                  </div>
+                                )}
                                 {aiBulletChoices.technical && (
                                   <div
                                     onClick={() => {
@@ -325,6 +365,50 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
           );
         })}
       </div>
+
+      {/* Privacy Consent Gate Modal */}
+      {showConsentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center gap-2 text-amber-600 font-bold text-base mb-2">
+              <ShieldAlert className="w-5 h-5" />
+              Privacy Consent Gate
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              To rewrite this bullet point, the bullet text, job title and company name will be transmitted securely to the AI service.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConsentModal(false);
+                  setPendingAiBullet(null);
+                  setImprovingBulletInfo(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAiConsentGiven(true);
+                  setShowConsentModal(false);
+                  const p = pendingAiBullet;
+                  setPendingAiBullet(null);
+                  if (p) {
+                    runAiBulletImprovement(p.expId, p.bulletIndex, p.currentBullet, p.jobTitle, p.company);
+                  }
+                }}
+                className="px-5 py-2 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
+              >
+                Allow &amp; Rewrite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
