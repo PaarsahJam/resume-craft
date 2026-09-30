@@ -6,9 +6,64 @@ import {
   HeadingLevel,
   AlignmentType,
   BorderStyle,
+  ImageRun,
 } from 'docx';
-import { Resume, TemplateOptions } from '../types';
+import { PhotoConfig, Resume, TemplateOptions } from '../types';
 import { getSectionTitle } from './i18n';
+
+/** Edge length of the embedded photo, ~28mm at 96 DPI. */
+const PHOTO_SIZE_PX = 106;
+
+type DocxImageType = 'png' | 'jpg' | 'gif' | 'bmp';
+
+const MIME_TO_TYPE: Record<string, DocxImageType> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/gif': 'gif',
+  'image/bmp': 'bmp',
+  'image/x-ms-bmp': 'bmp',
+};
+
+/**
+ * Word can't read every format the editor accepts (webp, svg) and won't fetch
+ * remote URLs, so anything other than a base64 data URL Word understands is
+ * decoded and re-encoded as a square PNG. Returns null instead of throwing — a
+ * missing photo shouldn't sink the whole export.
+ */
+async function resolvePhoto(photo: PhotoConfig): Promise<{ data: string; type: DocxImageType } | null> {
+  const dataUrlType = /^data:([^;,]+);base64,/.exec(photo.dataUrl);
+  if (dataUrlType) {
+    const type = MIME_TO_TYPE[dataUrlType[1].toLowerCase()];
+    if (type) return { data: photo.dataUrl, type };
+  }
+
+  try {
+    const blob = await (await fetch(photo.dataUrl)).blob();
+    const bitmap = await createImageBitmap(blob);
+    // Centre-crop to a square so the photo isn't stretched by the fixed frame.
+    const side = Math.min(bitmap.width, bitmap.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = PHOTO_SIZE_PX * 2;
+    canvas.height = PHOTO_SIZE_PX * 2;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(
+      bitmap,
+      (bitmap.width - side) / 2,
+      (bitmap.height - side) / 2,
+      side,
+      side,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+    return { data: canvas.toDataURL('image/png'), type: 'png' };
+  } catch {
+    return null;
+  }
+}
 
 export async function generateDocxBlob(resume: Resume, options: TemplateOptions): Promise<Blob> {
   const { personal, summary, skills, experience, projects, education, certifications, languages, additionalSections, sectionOrder } = resume;
@@ -70,6 +125,31 @@ export async function generateDocxBlob(resume: Resume, options: TemplateOptions)
         ],
       })
     );
+  }
+
+  // Photo — hidden in ATS mode and when the shape is set to "none", matching the
+  // templates, so the DOCX and the preview stay in sync.
+  if (personal.photo?.dataUrl && personal.photo.shape !== 'none' && !options.atsMode) {
+    const photo = await resolvePhoto(personal.photo);
+    if (photo) {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 160, after: 160 },
+          children: [
+            new ImageRun({
+              type: photo.type,
+              data: photo.data,
+              transformation: { width: PHOTO_SIZE_PX, height: PHOTO_SIZE_PX },
+              altText: {
+                name: 'Profile photo',
+                description: `${personal.fullName || 'Candidate'} profile photo`,
+              },
+            }),
+          ],
+        })
+      );
+    }
   }
 
   // Divider

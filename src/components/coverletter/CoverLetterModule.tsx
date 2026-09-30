@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useResumeStore } from '../../store/useResumeStore';
 import { FileCode, Sparkles, Copy, Check, Loader2, Download, ShieldAlert } from 'lucide-react';
+import { fileNameTimestamp } from '../../lib/pdfExporter';
 
 export const CoverLetterModule: React.FC = () => {
   const {
@@ -115,7 +116,7 @@ export const CoverLetterModule: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Cover-Letter-${slug || 'draft'}.txt`;
+    a.download = `Cover-Letter-${slug || 'draft'}-${fileNameTimestamp()}.txt`;
     document.body.appendChild(a);
     a.click();
     a.remove();
