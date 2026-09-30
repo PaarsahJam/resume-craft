@@ -11,9 +11,10 @@ import { LanguagesEditor } from '../editor/LanguagesEditor';
 import { CustomSectionsEditor } from '../editor/CustomSectionsEditor';
 import { SectionReorderModal } from '../editor/SectionReorderModal';
 import { ExportControls } from '../export/ExportControls';
+import { DesignControls } from '../design/DesignControls';
 import { ResumeRenderer } from '../ResumeRenderer';
 import { TemplateId } from '../../types';
-import { Undo2, Redo2, Layers, Eye, ZoomIn, ZoomOut, Save, Sparkles, SlidersHorizontal, Layout } from 'lucide-react';
+import { Undo2, Redo2, Layers, Eye, ZoomIn, ZoomOut, Save, Sparkles, Layout } from 'lucide-react';
 
 export const ResumeBuilderView: React.FC = () => {
   const {
@@ -29,7 +30,7 @@ export const ResumeBuilderView: React.FC = () => {
     templateOptions,
   } = useResumeStore();
 
-  const [activeTab, setActiveTab] = useState<'details' | 'design'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'design' | 'export'>('details');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [isReorderOpen, setIsReorderOpen] = useState(false);
 
@@ -106,6 +107,17 @@ export const ResumeBuilderView: React.FC = () => {
             }`}
           >
             Design
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('export')}
+            className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+              activeTab === 'export'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+            }`}
+          >
+            Export
           </button>
           <button
             type="button"
@@ -195,6 +207,8 @@ export const ResumeBuilderView: React.FC = () => {
               <LanguagesEditor languages={activeResume.languages} onChange={handleLanguagesChange} />
               <CustomSectionsEditor additionalSections={activeResume.additionalSections} onChange={handleAdditionalSectionsChange} />
             </>
+          ) : activeTab === 'design' ? (
+            <DesignControls />
           ) : (
             <ExportControls />
           )}

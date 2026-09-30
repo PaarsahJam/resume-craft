@@ -5,7 +5,6 @@ import {
   TextRun,
   HeadingLevel,
   AlignmentType,
-  ExternalHyperlink,
   BorderStyle,
 } from 'docx';
 import { Resume, TemplateOptions } from '../types';
@@ -239,6 +238,7 @@ export function downloadDocx(blob: Blob, filename: string) {
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Revoking in the same task can abort the download in Firefox/Safari.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
