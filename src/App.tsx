@@ -39,10 +39,10 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <h1 className="text-base sm:text-lg font-semibold tracking-tight text-[#212529]">
-              CV-Architect Pro
+              ResumeCraft AI
             </h1>
             <span className="px-2 py-0.5 bg-[#E7F5FF] text-blue-700 text-xs font-medium rounded hidden sm:inline-block">
-              v2.1.0
+              v{__APP_VERSION__}
             </span>
           </div>
         </div>
