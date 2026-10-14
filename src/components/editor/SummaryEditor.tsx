@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Sparkles, FileText, Check, ShieldAlert, Loader2 } from 'lucide-react';
+import { Sparkles, FileText, Check, ShieldAlert, Loader2, AlertTriangle } from 'lucide-react';
 import { useResumeStore } from '../../store/useResumeStore';
+import { describeAiFailure, AI_NETWORK_ERROR_MESSAGE } from '../../lib/aiErrors';
 
 interface SummaryEditorProps {
   summary?: string;
@@ -13,6 +14,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({ summary = '', head
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<{ concise?: string; executive?: string } | null>(null);
   const [showConsentModal, setShowConsentModal] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const requestAiSummary = async (force = false) => {
     if (!aiConsentGiven && !force) {
@@ -22,6 +24,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({ summary = '', head
 
     setIsAiLoading(true);
     setAiSuggestions(null);
+    setAiError(null);
 
     try {
       const res = await fetch('/api/ai/improve-summary', {
@@ -33,11 +36,17 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({ summary = '', head
         }),
       });
 
-      if (!res.ok) throw new Error('AI summary generation failed');
+      // Read the server's structured error code so the user sees why it failed.
+      if (!res.ok) {
+        const failure = await describeAiFailure(res);
+        setAiError(failure.message);
+        return;
+      }
       const data = await res.json();
       setAiSuggestions(data);
-    } catch (e: any) {
-      alert(e.message || 'AI request failed');
+    } catch {
+      // The request never reached the server (offline, server down, aborted).
+      setAiError(AI_NETWORK_ERROR_MESSAGE);
     } finally {
       setIsAiLoading(false);
     }
@@ -70,13 +79,36 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({ summary = '', head
         className="w-full p-3 border border-slate-200 rounded-xl text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-y"
       />
 
+      {/* Inline, non-blocking AI failure notice */}
+      {aiError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900"
+        >
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+          <span className="flex-1">{aiError}</span>
+          <button
+            type="button"
+            onClick={() => setAiError(null)}
+            aria-label="Dismiss AI error"
+            className="shrink-0 text-amber-700 hover:text-amber-900 font-bold px-1"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* AI Suggestion preview choices */}
       {aiSuggestions && (
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in">
           <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            AI Suggestions (Select one to apply):
+            AI Suggestions (your summary is unchanged until you pick one):
           </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            AI can add achievements or employers you never mentioned. Check every suggestion against
+            your real experience before applying it.
+          </p>
 
           {aiSuggestions.concise && (
             <div className="p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition cursor-pointer group" onClick={() => { onChange(aiSuggestions.concise!); setAiSuggestions(null); }}>
@@ -97,6 +129,17 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({ summary = '', head
               <p className="text-xs text-slate-700">{aiSuggestions.executive}</p>
             </div>
           )}
+
+          {/* Explicit reject: dismiss without touching the user's summary. */}
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => setAiSuggestions(null)}
+              className="px-2.5 py-1 bg-white border border-slate-300 text-slate-600 rounded-lg text-[11px] font-semibold transition hover:bg-slate-50"
+            >
+              Discard suggestions
+            </button>
+          </div>
         </div>
       )}
 

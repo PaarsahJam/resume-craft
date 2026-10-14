@@ -10,7 +10,7 @@ a line in half.**
 [![React](https://img.shields.io/badge/react-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Vite](https://img.shields.io/badge/vite-6-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev)
 [![Tailwind](https://img.shields.io/badge/tailwind-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![Gemini](https://img.shields.io/badge/AI-Gemini-8E75B2?style=flat-square&logo=googlegemini&logoColor=white)](https://ai.google.dev)
+[![OpenRouter](https://img.shields.io/badge/AI-OpenRouter-6467F2?style=flat-square&logo=openrouter&logoColor=white)](https://openrouter.ai)
 <!-- Bump this version badge by hand on release; the in-app badge is wired to package.json. -->
 [![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](#)
 
@@ -30,7 +30,7 @@ be sent.
 
 - **Version:** `0.1.0`
 - **Stack:** React 19 + Vite 6 + TypeScript, Express 4 backend, Tailwind CSS 4, Zustand
-- **AI:** Google Gemini via `@google/genai` (model `gemini-3.6-flash`)
+- **AI:** OpenRouter (default model `nvidia/nemotron-3-ultra-550b-a55b:free`)
 
 > **Naming note.** The product name is **ResumeCraft AI** everywhere: `metadata.json`, the
 > UI header, the AI consent dialogs, and the server startup log. The version badge in the
@@ -148,7 +148,7 @@ commit.
 ### Internationalisation
 
 - Section headers in **English** or **Armenian (Հայերեն)**.
-- Full resume translation between the two languages via Gemini.
+- Full resume translation between the two languages via AI.
 
 ### Export
 
@@ -177,15 +177,15 @@ other.
 | Icons / animation | `lucide-react`, `motion` |
 | PDF | `jsPDF`, `html-to-image` |
 | DOCX | `docx` |
-| AI | `@google/genai` |
+| AI | OpenRouter (`/api/v1/chat/completions`) |
 
 ---
 
 ## Requirements
 
 - **Node.js 20+** (developed and verified on Node 24). The AI SDK declares `node >= 20`.
-- A **Gemini API key** — optional. Without it every editor, template, scoring, import and
-  export feature still works; only the five AI endpoints return an error.
+- An **OpenRouter API key** — optional. Without it every editor, template, scoring, import and
+  export feature still works; only the five AI endpoints return a configuration error (HTTP 503).
 
 > Both `package-lock.json` (npm) and `bun.lock` (Bun) are committed. Pick one and delete
 > the other if you want a single source of truth — currently they can drift.
@@ -200,7 +200,7 @@ npm install
 
 # 2. Configure the environment (optional — needed only for AI features)
 cp .env.example .env
-# then edit .env and set GEMINI_API_KEY
+# then edit .env and set OPENROUTER_API_KEY
 
 # 3. Start the dev server
 npm run dev
@@ -232,17 +232,21 @@ boots but serves the app through Vite instead of the static bundle.
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `GEMINI_API_KEY` | For AI features | — | Google Gemini API key. Read by `server.ts`. Every `/api/ai/*` route returns HTTP 500 without it. |
+| `OPENROUTER_API_KEY` | For AI features | — | OpenRouter API key. Read by the server. Every `/api/ai/*` route returns HTTP 503 `not_configured` without it. Never exposed to the client. |
+| `OPENROUTER_MODEL` | No | `nvidia/nemotron-3-ultra-550b-a55b:free` | Model used for AI requests. Any model supported by your OpenRouter account works. The server logs the resolved model and whether it came from this variable or the built-in default. |
 | `NODE_ENV` | For production | — | `production` serves `dist/`; anything else mounts Vite in middleware mode. |
 | `DISABLE_HMR` | No | unset | Set to `true` to disable Vite HMR and file watching (useful in containerised agent workflows). |
-| `APP_URL` | No | — | **Declared in `.env.example` but never read by the code.** Safe to delete. |
+| `HOST` | No | `127.0.0.1` | Interface the server binds to. Set `0.0.0.0` for container/VM deployments. |
+| `PORT` | No | `3000` | TCP port the server listens on. |
+| `APP_URL` | No | — | Optional public URL, sent to OpenRouter for provider attribution (`HTTP-Referer`). |
+| `APP_NAME` | No | — | Optional app name, sent to OpenRouter for attribution (`X-Title`). |
 
 Environment values are loaded by `dotenv` from `.env` in the project root. `.env*` is
 git-ignored; `.env.example` is tracked.
 
-There is **no `PORT` environment variable** — the server hardcodes port `3000`
-(`server.ts:11`). Change the constant, or front the process with a proxy, if you need a
-different port.
+The server binds **loopback (`127.0.0.1`) by default**, so a fresh clone is not
+publicly reachable. Set `HOST=0.0.0.0` for the documented container/VM deployment
+model (Cloud Run, Render, Railway, Fly.io).
 
 ---
 
@@ -301,7 +305,7 @@ different port.
 ### Data flow
 
 Everything except the five AI calls happens in the browser. The server is a thin proxy for
-Gemini and a static file host — it never sees a resume unless an AI feature is invoked.
+OpenRouter and a static file host — it never sees a resume unless an AI feature is invoked.
 
 ```mermaid
 flowchart TB
@@ -330,14 +334,14 @@ flowchart TB
         STATIC["Serves the app<br/><i>Vite middleware in dev, static dist in prod</i><br/><i>not part of the data flow</i>"]
     end
 
-    GEMINI[["Gemini API<br/><i>gemini-3.6-flash</i>"]]
+    OPENROUTER[["OpenRouter API<br/><i>chat/completions</i>"]]
 
     UI -- "opt-in, behind a consent dialog" --> API
-    API --> GEMINI
+    API --> OPENROUTER
 
     style browser fill:#f8f9fa,stroke:#adb5bd
     style server fill:#e7f5ff,stroke:#4dabf7
-    style GEMINI fill:#f3f0ff,stroke:#9775fa
+    style OPENROUTER fill:#f3f0ff,stroke:#9775fa
 ```
 
 Two consequences worth internalising:
@@ -464,10 +468,16 @@ ATS mode (which suppresses the photo), and embeds the profile photo as a centred
 
 ### AI endpoints
 
-All five are optional and gated behind an in-app consent dialog. The server uses
-`@google/genai` with model `gemini-3.6-flash` and returns JSON matching a
-`responseSchema` (except cover-letter generation, which returns text). Failures produce
-HTTP 500 with `{ error }`.
+All five are optional and gated behind an in-app consent dialog. The server calls the
+OpenRouter chat-completions API (`POST https://openrouter.ai/api/v1/chat/completions`)
+with the model from `OPENROUTER_MODEL` (default `nvidia/nemotron-3-ultra-550b-a55b:free`).
+Structured endpoints request JSON-object output and are validated server-side against the
+expected shape (except cover-letter generation, which returns plain text).
+
+Every request is validated (invalid input → HTTP 400), rate limited (HTTP 429), and given a
+configurable timeout. The API key stays server-side and is never returned to the client,
+included in errors, or logged. Model output is validated before it reaches the frontend;
+malformed output returns HTTP 502.
 
 | Route | Sends | Returns |
 | --- | --- | --- |
@@ -494,9 +504,10 @@ validation step — review generated content before sending it to a recruiter.
 | `POST` | `/api/ai/generate-cover-letter` | API key | Draft a tailored cover letter |
 | `POST` | `/api/ai/translate-resume` | API key | Translate a resume EN ↔ HY |
 
-Request bodies are JSON, capped at 10 MB. There is no user authentication — anyone who can
-reach the server can use the API and exhaust the Gemini quota. Bind it to localhost or put
-it behind your own auth before exposing it.
+Request bodies are JSON, capped at **1 MB**. AI routes are rate limited to 20 requests per
+minute per client (HTTP 429 with `Retry-After`). There is no user authentication — the
+server binds loopback by default, but set `HOST=0.0.0.0` for a container deployment and
+put your own auth in front before exposing it publicly.
 
 ---
 
@@ -508,18 +519,23 @@ The app is a single Node process: build the client, then run the bundled server 
 ```bash
 npm ci
 npm run build
-NODE_ENV=production npm start
+HOST=0.0.0.0 NODE_ENV=production npm start
 ```
+
+The client bundle is written to `dist/` and the bundled Node server to `build/server.cjs`.
+They are deliberately separate: on a static host `dist/` is served as-is, and keeping the
+server bundle out of it means the server source is never publicly downloadable.
 
 Things to handle for a public deployment:
 
-- **The port is hardcoded to 3000**, so set your platform's port to 3000 or change
-  `server.ts`.
-- **Serve over HTTPS.** The Gemini calls send resume content off-device, and an HTTP origin
+- **Bind `HOST=0.0.0.0`** for container/VM platforms (Cloud Run, Render, Railway, Fly.io).
+  The server defaults to loopback, so an external-facing listener needs this explicit.
+- **Set `PORT`** if your platform assigns a different port (default `3000`).
+- **Serve over HTTPS.** The AI calls send resume content off-device, and an HTTP origin
   will be blocked by some browsers for clipboard and file APIs the UI uses.
-- **Set `GEMINI_API_KEY` as a secret**, never in the repository.
-- **There is no auth, rate limiting, or per-user isolation.** Add them before opening it up
-  beyond a trusted audience.
+- **Set `OPENROUTER_API_KEY` as a secret**, never in the repository.
+- **There is no user authentication.** AI routes are rate limited per client, but add real
+  auth before opening the app beyond a trusted audience.
 - `npm run preview` does **not** serve the API — it only previews the static bundle.
 
 ---
@@ -527,13 +543,13 @@ Things to handle for a public deployment:
 ## Troubleshooting
 
 **AI buttons return an error, everything else works.**
-`GEMINI_API_KEY` is unset or invalid. Confirm `.env` exists and that
-`curl -s localhost:3000/api/health` responds. Each AI route throws explicitly when the key
-is missing.
+`OPENROUTER_API_KEY` is unset or invalid. Confirm `.env` exists and that
+`curl -s localhost:3000/api/health` responds. Without a key each AI route returns HTTP 503
+with `code: not_configured`.
 
 **The dev server does not start.**
-Something is already on port 3000 — the port is not configurable. Vite also logs
-`Re-optimizing dependencies` on first boot after an install; that is normal and only slow.
+Something is already on the port. Vite also logs `Re-optimizing dependencies` on first boot
+after an install; that is normal and only slow.
 
 **PDF export falls back to the print dialog.**
 The PDF path threw. Exporting uses DOM-to-image rasterisation, which needs the preview to be
@@ -571,7 +587,7 @@ per resume for a portable backup, and the Import modal accepts it back as text. 
 site data, switching browser, or using a private window all start you from the seeded
 samples again.
 
-**Do I need a Gemini API key?**
+**Do I need an OpenRouter API key?**
 No — only for the five AI features (AI Polish, AI bullet rewrites, AI Tailor Pass, cover
 letter generation, and translation). Everything else works with no key at all.
 

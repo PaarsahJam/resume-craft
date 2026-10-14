@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ExperienceItem } from '../../types';
 import { Briefcase, Plus, Trash2, Copy, AlertTriangle, Sparkles, Loader2, ChevronDown, ChevronUp, ShieldAlert } from 'lucide-react';
 import { useResumeStore } from '../../store/useResumeStore';
+import { describeAiFailure, AI_NETWORK_ERROR_MESSAGE } from '../../lib/aiErrors';
 
 interface ExperienceEditorProps {
   experience: ExperienceItem[];
@@ -35,6 +36,7 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
     concise?: string;
     technical?: string;
   } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const handleAddExperience = () => {
     const newExp: ExperienceItem = {
@@ -110,6 +112,7 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
   const runAiBulletImprovement = async (expId: string, bulletIndex: number, currentBullet: string, jobTitle: string, company: string) => {
     setIsAiLoading(true);
     setAiBulletChoices(null);
+    setAiError(null);
 
     try {
       const res = await fetch('/api/ai/improve-bullet', {
@@ -122,15 +125,21 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
         }),
       });
 
-      if (!res.ok) throw new Error('AI bullet enhancement failed');
+      // Read the server's structured error code so the user sees why it failed.
+      if (!res.ok) {
+        const failure = await describeAiFailure(res);
+        setAiError(failure.message);
+        return;
+      }
       const data = await res.json();
       setAiBulletChoices({
         impact: data.impact,
         concise: data.concise,
         technical: data.technical,
       });
-    } catch (e: any) {
-      alert(e.message || 'AI request failed');
+    } catch {
+      // The request never reached the server (offline, server down, aborted).
+      setAiError(AI_NETWORK_ERROR_MESSAGE);
     } finally {
       setIsAiLoading(false);
     }
@@ -138,6 +147,24 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm space-y-4">
+      {/* Inline, non-blocking AI failure notice. The user's bullets are untouched. */}
+      {aiError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900"
+        >
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+          <span className="flex-1">{aiError}</span>
+          <button
+            type="button"
+            onClick={() => setAiError(null)}
+            aria-label="Dismiss AI error"
+            className="shrink-0 text-amber-700 hover:text-amber-900 font-bold px-1"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
           <Briefcase className="w-4 h-4 text-blue-600" />
@@ -306,11 +333,17 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
                           <div className="ml-5 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
                             {isAiLoading ? (
                               <div className="flex items-center gap-2 text-indigo-700 font-semibold text-xs py-1">
-                                <Loader2 className="w-4 h-4 animate-spin" /> Rewriting bullet point with AI metrics...
+                                <Loader2 className="w-4 h-4 animate-spin" /> Drafting alternative bullet wording...
                               </div>
                             ) : aiBulletChoices ? (
                               <div className="space-y-2">
-                                <div className="text-[11px] font-bold text-indigo-900">Select an improved bullet option:</div>
+                                <div className="text-[11px] font-bold text-indigo-900">
+                                  Suggested rewrites (nothing changes until you pick one):
+                                </div>
+                                <p className="text-[11px] text-slate-500 leading-relaxed">
+                                  Check each rewrite against your real experience — AI can invent
+                                  metrics or employers you never worked with.
+                                </p>
                                 {aiBulletChoices.impact && (
                                   <div
                                     onClick={() => {
@@ -344,6 +377,20 @@ export const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, 
                                     <strong className="text-indigo-600">Technical Outcome: </strong> {aiBulletChoices.technical}
                                   </div>
                                 )}
+
+                                {/* Explicit reject: discards the suggestions and keeps the original bullet. */}
+                                <div className="flex justify-end pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAiBulletChoices(null);
+                                      setImprovingBulletInfo(null);
+                                    }}
+                                    className="px-2.5 py-1 bg-white border border-slate-300 text-slate-600 rounded-lg text-[11px] font-semibold transition hover:bg-slate-50"
+                                  >
+                                    Discard suggestions
+                                  </button>
+                                </div>
                               </div>
                             ) : null}
                           </div>

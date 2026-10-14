@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useResumeStore } from '../../store/useResumeStore';
-import { FileCode, Sparkles, Copy, Check, Loader2, Download, ShieldAlert } from 'lucide-react';
+import { FileCode, Sparkles, Copy, Check, Loader2, Download, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { fileNameTimestamp } from '../../lib/pdfExporter';
+import { describeAiFailure, AI_NETWORK_ERROR_MESSAGE } from '../../lib/aiErrors';
 
 export const CoverLetterModule: React.FC = () => {
   const {
@@ -22,6 +23,11 @@ export const CoverLetterModule: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  // A generated letter is held for review when a draft already exists.
+  const [pendingLetter, setPendingLetter] = useState<string | null>(null);
+  // Whether a draft already existed, so the review copy can be accurate.
+  const [isReplacingDraft, setIsReplacingDraft] = useState(false);
 
   const activeResume = resumes.find((r) => r.id === activeResumeId);
 
@@ -79,6 +85,9 @@ export const CoverLetterModule: React.FC = () => {
     if (!activeResume) return;
 
     setIsGenerating(true);
+    setAiError(null);
+    setPendingLetter(null);
+    setIsReplacingDraft(false);
     try {
       const res = await fetch('/api/ai/generate-cover-letter', {
         method: 'POST',
@@ -91,14 +100,43 @@ export const CoverLetterModule: React.FC = () => {
         }),
       });
 
-      if (!res.ok) throw new Error('Cover letter generation failed');
+      // Read the server's structured error code so the user sees why it failed.
+      // The existing draft letter is left exactly as it was.
+      if (!res.ok) {
+        const failure = await describeAiFailure(res);
+        setAiError(failure.message);
+        return;
+      }
       const data = await res.json();
-      handleBodyChange(data.body || '');
-    } catch (e: any) {
-      alert(e.message || 'AI request failed');
+      const draft = typeof data.body === 'string' ? data.body : '';
+
+      // Never overwrite an existing draft implicitly. If there is already
+      // content, present the generated letter for review instead.
+      // Decision 3: ALWAYS require explicit acceptance, even when the editor
+      // is empty. Generation and application are separate steps so the user
+      // always reads what the model produced before it becomes their letter.
+      setIsReplacingDraft(coverLetter.trim().length > 0);
+      setPendingLetter(draft);
+    } catch {
+      // The request never reached the server (offline, server down, aborted).
+      setAiError(AI_NETWORK_ERROR_MESSAGE);
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  /** Explicit acceptance: the only path that replaces an existing draft. */
+  const acceptPendingLetter = () => {
+    if (pendingLetter === null) return;
+    handleBodyChange(pendingLetter);
+    setPendingLetter(null);
+    setIsReplacingDraft(false);
+  };
+
+  /** Explicit rejection: keep whatever the editor already contained. */
+  const rejectPendingLetter = () => {
+    setPendingLetter(null);
+    setIsReplacingDraft(false);
   };
 
   const handleCopy = () => {
@@ -128,6 +166,24 @@ export const CoverLetterModule: React.FC = () => {
 
   return (
     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      {/* Inline, non-blocking AI failure notice */}
+      {aiError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900"
+        >
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+          <span className="flex-1">{aiError}</span>
+          <button
+            type="button"
+            onClick={() => setAiError(null)}
+            aria-label="Dismiss AI error"
+            className="shrink-0 text-amber-700 hover:text-amber-900 font-bold px-1"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
         <div>
           <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
@@ -174,6 +230,46 @@ export const CoverLetterModule: React.FC = () => {
         </div>
       </div>
 
+      {/* Cover-letter review gate: an existing draft is never overwritten silently. */}
+      {pendingLetter !== null && (
+        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
+          <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+            Review Generated Letter — not saved yet
+          </div>
+          <p className="text-[11px] text-slate-600 leading-relaxed">
+            {isReplacingDraft
+              ? 'You already have a draft saved. Applying will replace it. Your current draft is unchanged until you accept.'
+              : 'Your editor is unchanged. Read the generated letter below, then accept it to add it to your editor.'}
+          </p>
+          <p className="text-[11px] text-slate-600 leading-relaxed">
+            AI text can introduce details you never wrote. Verify every claim against your own
+            experience before accepting.
+          </p>
+          <div className="p-3 bg-white border border-slate-200 rounded-lg max-h-56 overflow-y-auto">
+            <pre className="text-[11px] text-slate-600 whitespace-pre-wrap break-words font-sans">
+              {pendingLetter.slice(0, 1200)}
+            </pre>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={rejectPendingLetter}
+              className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 font-semibold rounded-xl transition hover:bg-slate-50"
+            >
+              Discard — keep my text
+            </button>
+            <button
+              type="button"
+              onClick={acceptPendingLetter}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition"
+            >
+              {isReplacingDraft ? 'Replace Draft' : 'Use This Letter'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Cover Letter Content Textarea */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -218,7 +314,7 @@ export const CoverLetterModule: React.FC = () => {
               Privacy Consent Gate
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              To generate your custom cover letter, your resume details and target company info will be transmitted securely to Gemini AI.
+              To generate your custom cover letter, your resume details and target company info will be transmitted securely to our AI service provider.
             </p>
 
             <div className="mt-5 flex justify-end gap-2">

@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useResumeStore } from '../../store/useResumeStore';
 import { Resume } from '../../types';
-import { Target, Sparkles, CheckCircle2, AlertCircle, ShieldAlert, Loader2 } from 'lucide-react';
+import { Target, Sparkles, CheckCircle2, AlertCircle, ShieldAlert, Loader2, AlertTriangle } from 'lucide-react';
+import { describeAiFailure, AI_NETWORK_ERROR_MESSAGE } from '../../lib/aiErrors';
 
 export const ResumeScorePanel: React.FC = () => {
   const {
@@ -17,6 +18,7 @@ export const ResumeScorePanel: React.FC = () => {
 
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const activeResume = resumes.find((r) => r.id === activeResumeId);
 
@@ -123,11 +125,12 @@ export const ResumeScorePanel: React.FC = () => {
     }
 
     if (!jobDescriptionInput.trim()) {
-      alert('Please paste a Job Description first.');
+      setAiError('Please paste a Job Description first.');
       return;
     }
 
     setIsAiAnalyzing(true);
+    setAiError(null);
     try {
       const res = await fetch('/api/ai/tailor-jd', {
         method: 'POST',
@@ -138,7 +141,12 @@ export const ResumeScorePanel: React.FC = () => {
         }),
       });
 
-      if (!res.ok) throw new Error('AI analysis failed');
+      // Read the server's structured error code so the user sees why it failed.
+      if (!res.ok) {
+        const failure = await describeAiFailure(res);
+        setAiError(failure.message);
+        return;
+      }
       const data = await res.json();
       // The model response is untyped and the server falls back to `{}`, so
       // normalise before storing or the render below will throw on `.length`.
@@ -149,8 +157,9 @@ export const ResumeScorePanel: React.FC = () => {
         suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
         lastAnalyzedAt: new Date().toISOString(),
       });
-    } catch (e: any) {
-      alert(e.message || 'AI request failed');
+    } catch {
+      // The request never reached the server (offline, server down, aborted).
+      setAiError(AI_NETWORK_ERROR_MESSAGE);
     } finally {
       setIsAiAnalyzing(false);
     }
@@ -160,6 +169,24 @@ export const ResumeScorePanel: React.FC = () => {
 
   return (
     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      {/* Inline, non-blocking AI failure notice */}
+      {aiError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900"
+        >
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+          <span className="flex-1">{aiError}</span>
+          <button
+            type="button"
+            onClick={() => setAiError(null)}
+            aria-label="Dismiss AI error"
+            className="shrink-0 text-amber-700 hover:text-amber-900 font-bold px-1"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
         <div>
           <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">

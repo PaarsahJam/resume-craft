@@ -1,8 +1,8 @@
 import { Resume } from '../types';
 
-export const sampleResumeMarkdown = `# PAARSAH SOROURI JAM
+export const sampleResumeMarkdown = `# ALEX MORGAN
 **Software Engineer | Full-Stack Developer | .NET / Java | React / Next.js | Flutter | Sensor Processing & 3D Visualization**
-Yerevan, Armenia | +374 93 067 011 | paarsah.sorouri@gmail.com | https://github.com/PaarsahJam | linkedin.com/in/paarsah-sorouri-jam-2892922a2
+Yerevan, Armenia | +1 555 0100 | alex.morgan@example.com | https://github.com/alexmorgan-demo | linkedin.com/in/alexmorgan-demo
 
 ## PROFESSIONAL SUMMARY
 Versatile and detail-oriented Software Engineer with extensive experience architecting modern full-stack web applications, cross-platform software, and high-performance engineering simulations. Skilled in C#, Java, TypeScript/JavaScript, React/Next.js, and Flutter, with specialized domain expertise in inertial sensor processing (AHRS/IMU), real-time 3D telemetry visualization, and data-intensive distributed backends. Proven track record in designing resilient RESTful/GraphQL APIs, implementing mathematical sensor fusion algorithms (EKF/MEKF), and building scalable user interfaces.
@@ -277,21 +277,21 @@ export const armenianSampleResume: Resume = {
 export const sampleResume: Resume = {
   id: 'demo-sample-resume',
   meta: {
-    title: 'PAARSAH SOROURI JAM — Software Engineer & Full-Stack Developer',
+    title: 'ALEX MORGAN — Software Engineer & Full-Stack Developer',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     tags: ['Full-Stack', '.NET', 'Java', 'React', 'Sensor Processing', '3D Graphics', 'Remote'],
   },
   personal: {
-    fullName: 'PAARSAH SOROURI JAM',
+    fullName: 'ALEX MORGAN',
     headline:
       'Software Engineer | Full-Stack Developer | .NET / Java | React / Next.js | Flutter | Sensor Processing & 3D Visualization',
     location: 'Yerevan, Armenia',
-    email: 'paarsah.sorouri@gmail.com',
-    phone: '+374 93 067 011',
-    website: 'https://github.com/PaarsahJam',
-    github: 'https://github.com/PaarsahJam',
-    linkedin: 'linkedin.com/in/paarsah-sorouri-jam-2892922a2',
+    email: 'alex.morgan@example.com',
+    phone: '+1 555 0100',
+    website: 'https://github.com/alexmorgan-demo',
+    github: 'https://github.com/alexmorgan-demo',
+    linkedin: 'linkedin.com/in/alexmorgan-demo',
   },
   summary:
     'Versatile and detail-oriented Software Engineer with extensive experience architecting modern full-stack web applications, cross-platform software, and high-performance engineering simulations. Skilled in C#, Java, TypeScript/JavaScript, React/Next.js, and Flutter, with specialized domain expertise in inertial sensor processing (AHRS/IMU), real-time 3D telemetry visualization, and data-intensive distributed backends. Proven track record in designing resilient RESTful/GraphQL APIs, implementing mathematical sensor fusion algorithms (EKF/MEKF), and building scalable user interfaces.',
